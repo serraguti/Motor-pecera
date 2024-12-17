@@ -4,6 +4,7 @@
 #include <U8g2lib.h>
 #include <Adafruit_BMP280.h>
 #include "logo.h"
+#include <ArduinoOTA.h>
 
 const int pinMotor1 = 17;  // Pin que controla el sentido de giro Motor A
 const int pinMotor2 = 16;  // Pin que controla el sentido de giro Motor A
@@ -12,6 +13,7 @@ int valorPulsadorStop = 0;  //Variable para capturar la pulsación
 int motorIniciado = 0;
 
 int movimiento = 0;
+const int pinLED = 22;
 //CONFIGURACION DEL WIFI
 const char* ssid = "DIGIFIBRA_2G";
 const char* password = "SerraTormo14";
@@ -34,9 +36,9 @@ PubSubClient mqttClient(espClient);
 
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
-String ultimacomida = " 19/03/2024 19:20 ";
+String ultimacomida = " 03/12/2024 19:20 ";
 
-String ultimocambio = " 14/03/2024 10:14 ";
+String ultimocambio = " 03/12/2024 10:14 ";
 
 void ponerLogotipo(){
     u8g2.setDrawColor(1);
@@ -145,15 +147,25 @@ void OnMqttReceived(char *topic, byte *payload, unsigned int length)
           motorIniciado = 0;
           IniciarMotor();
           Serial.print("Iniciando motor");
+          mqttClient.publish("bicho","iniciando");
           //delay(10000);      
           //mqttClient.publish("pecera","stop");
         }else if (content == "off"){
           //movimiento = 0;
           Serial.print("Deteniendo motor");
+          mqttClient.publish("bicho","deteniendo");
           StopMotor();
         }
     }       
  
+}
+
+void encenderLed(){
+  digitalWrite(pinLED, HIGH); // turn the LED on (HIGH is the voltage level)
+}
+
+void apagarLed(){
+  digitalWrite(pinLED, LOW);  // turn the LED off by making the voltage LOW
 }
 
 // starts the MQTT communication
@@ -163,6 +175,48 @@ void InitMqtt()
     mqttClient.setServer(mqttServer, mqttPort);
     mqttClient.setCallback(OnMqttReceived);
     //mqttClient.publish("pecera","conectado mqtt");
+}
+
+void InitOTA()
+{
+  ArduinoOTA.setHostname("ESP32-pecera");
+  ArduinoOTA.onStart([]()
+  {
+      String type;
+      if (ArduinoOTA.getCommand() == U_FLASH) {
+        type = "sketch";
+      } else {  // U_FS
+        type = "filesystem";
+      }
+
+      Serial.println("Iniciando Programación " + type); 
+  });
+  ArduinoOTA.onEnd([]()
+  { 
+    Serial.println("\nTerminando"); 
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
+  { 
+    Serial.printf("Progreso: %u%%\r", (progress / (total / 100))); 
+  });
+  ArduinoOTA.onError([](ota_error_t error)
+  {
+      Serial.printf("Error[%u]: ", error);
+      if (error == OTA_AUTH_ERROR) {
+        Serial.println("Auth Failed");
+      } else if (error == OTA_BEGIN_ERROR) {
+        Serial.println("Begin Failed");
+      } else if (error == OTA_CONNECT_ERROR) {
+        Serial.println("Connect Failed");
+      } else if (error == OTA_RECEIVE_ERROR) {
+        Serial.println("Receive Failed");
+      } else if (error == OTA_END_ERROR) {
+        Serial.println("End Failed");
+      } 
+  });
+
+  ArduinoOTA.begin();
+  delay(12000);  
 }
 
 // connects or reconnects to MQTT
@@ -177,7 +231,9 @@ void ConnectMqtt()
       if (mqttClient.connect("ESP32Client", mqttUser, mqttPassword )){
         SuscribeMqtt();
         Serial.println("Connected to MQTT");
-        //mqttClient.publish("pecera","conectado mqtt");
+        //apagarLed();
+        mqttClient.publish("bicho","conectado!!!");
+        mqttClient.publish("bicho","conectado mqtt");
       }else
       {   
         Serial.print("failed with state ");
@@ -203,6 +259,7 @@ void HandleMqtt()
 void setup() {
   Serial.begin(9600);
   while (!Serial);  // For Yun/Leo/Micro/Zero/...
+  pinMode(pinLED, OUTPUT);
   //INICIAMOS LA CONFIGURACION DEL MOTOR
   pinMode(pinMotor1, OUTPUT);    // Configura  los pines como salida
   pinMode(pinMotor2, OUTPUT);
@@ -219,32 +276,38 @@ void setup() {
     Serial.println("Connecting to WiFi..");
   }
   Serial.println("Connected to the WiFi network");
+  //encenderLed();
   //mqttClient.publish("pecera","conectado al Wifi");
   InitMqtt();
+  InitOTA();
   //CONFIGURAMOS LA PANTALLA
   u8g2.begin(); //Inicializamos el dispositivo
   //u8g2.drawStr(5,35,"tecnotizate.es");
   
   ponerLogotipo();
+  //mqttClient.publish("pecera","ready");
   delay(12000);
 }
 
 // the loop routine runs over and over again forever:
 void loop() {
+  ArduinoOTA.handle();
+  //encenderLed();
   HandleMqtt();
     valorPulsadorStop = digitalRead(pulsadorPinStop);
     if (valorPulsadorStop == HIGH) {
+      //encenderLed();
       //PONEMOS UNA VARIABLE PARA COMPROBAR SI HA INICIADO O NO
       if (motorIniciado == 1){
         //AQUI ES DONDE VAMOS A PARAR EL MOTOR
         Serial.print("Boton pulsado, deteniendo motor");
         mqttClient.publish("pecera","off");
         motorIniciado = 0;
+        //apagarLed();
       }
       //StopMotor();
     }
     dibujarDatosPantalla();  
- 
   // digitalWrite(pinMotor1, LOW);  // GIRO DERECHA
   // digitalWrite(pinMotor2, HIGH);
 }
