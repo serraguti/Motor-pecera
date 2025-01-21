@@ -36,7 +36,7 @@ PubSubClient mqttClient(espClient);
 
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
-String ultimacomida = " 03/12/2024 19:20 ";
+String ultimacomida = " 07/01/2025 19:47 ";
 
 String ultimocambio = " 03/12/2024 10:14 ";
 
